@@ -1,0 +1,7 @@
+# 强制所有文件使用LF换行符
+* text=auto eol=lf
+
+# 或仅对特定文件类型指定
+*.css text eol=lf
+*.js text eol=lf
+*.html text eol=lf
