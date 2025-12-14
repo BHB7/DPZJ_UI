@@ -1,2 +1,11 @@
 @import 'tailwindcss';
 @plugin "daisyui";
+/* 搜索框动画 */
+.search-input {
+  @apply transition-all duration-300 focus:ring-2 focus:ring-primary/50;
+}
+
+/* 结果项 hover 效果 */
+.result-item {
+  @apply hover:bg-base-200 transition-colors duration-200;
+}

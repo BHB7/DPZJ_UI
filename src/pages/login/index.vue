@@ -56,6 +56,9 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
+defineOptions({
+  name: 'loginPage',
+})
 </script>
 <template>
   <div

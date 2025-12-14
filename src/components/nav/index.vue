@@ -1,6 +1,9 @@
 <script setup>
 import LineMdCloseToMenuAltTransition from '~icons/line-md/close-to-menu-alt-transition'
 import ThemeBtn from '@/components/theme/index.vue'
+defineOptions({
+  name: 'navPage',
+})
 </script>
 <template>
   <div class="navbar bg-base-100 shadow-sm">
