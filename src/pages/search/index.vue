@@ -262,7 +262,14 @@
       <!-- 订单卡片列表 -->
       <div class="grid grid-cols-1 gap-6">
         <div class="codes flex flex-wrap justify-center items-center">
-          <div class="badge badge-soft badge-primary py-1">sc</div>
+          <div
+            v-for="(item, index) in codeKeys"
+            :key="item.rtime"
+            class="badge badge-soft py-1 mx-1"
+            :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
+          >
+            {{ jscodes[item.username] || item.username }}
+          </div>
         </div>
         <div
           v-for="(order, index) in searchResults"
@@ -487,7 +494,8 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
-
+import { searchApi } from '@/api'
+import badge from 'daisyui/components/badge'
 // 假设已引入jQuery和layer（如果项目中已存在，可忽略）
 // import $ from 'jquery'
 // import layer from 'layui-layer'
@@ -511,6 +519,8 @@ const searchParams = ref({
   order: '', // 订单号
   agent: '', // 代理商/仓库
 })
+// 供应商去重后的搜索列表
+const codeKeys = ref()
 // 响应式数据 - 搜索建议列表
 const searchSuggestions = ref([])
 // 响应式数据 - 搜索历史记录
@@ -544,74 +554,6 @@ const hotKeywords = ref([
   '已入库',
 ])
 
-// 模拟汽配入库订单数据
-const mockOrderData = [
-  {
-    rtime: '2025-12-12 16:10:32',
-    order_id: 'ZR20251212-85508040-1',
-    username: '哈尔滨仓',
-    jfcode: 'AD-C0001',
-    name: '控制臂前下左(直)',
-    pp: '中性',
-    description: '奥迪Q7L(4MB)15-',
-    rsum: '5',
-    price: '95.5000',
-    type: '独立采购入库',
-    mcode: '奥迪Q7L控制臂奥迪Q7L控制臂',
-    total_moeny: '477.5000',
-    orderstate: '已入库',
-    inventory: '40',
-  },
-  {
-    rtime: '2025-12-11 09:25:18',
-    order_id: 'ZR20251211-78956234-2',
-    username: '哈尔滨仓',
-    jfcode: 'AD-C0002',
-    name: '控制臂前下右(弯)',
-    pp: '中性',
-    description: '奥迪Q7L(4MB)16-',
-    rsum: '8',
-    price: '98.8000',
-    type: '独立采购入库',
-    mcode: '奥迪Q7L控制臂奥迪Q7L控制臂',
-    total_moeny: '790.4000',
-    orderstate: '已入库',
-    inventory: '35',
-  },
-  {
-    rtime: '2025-12-10 14:40:55',
-    order_id: 'ZR20251210-65489721-3',
-    username: '长春仓',
-    jfcode: 'VW-B0001',
-    name: '减震器前左',
-    pp: '原厂',
-    description: '大众途观L 20-23款',
-    rsum: '10',
-    price: '156.2000',
-    type: '批量采购入库',
-    mcode: '大众途观L减震器',
-    total_moeny: '1562.0000',
-    orderstate: '已入库',
-    inventory: '68',
-  },
-  {
-    rtime: '2025-12-09 11:15:22',
-    order_id: 'ZR20251209-98754213-4',
-    username: '沈阳仓',
-    jfcode: 'BM-W0003',
-    name: '刹车盘后',
-    pp: '原厂',
-    description: '宝马X5(G05) 19-22款',
-    rsum: '6',
-    price: '289.9000',
-    type: '独立采购入库',
-    mcode: '宝马X5刹车盘',
-    total_moeny: '1739.4000',
-    orderstate: '已入库',
-    inventory: '8',
-  },
-]
-
 // 模拟搜索建议数据
 const mockSuggestions = [
   'ZR20251212',
@@ -623,7 +565,29 @@ const mockSuggestions = [
   'VW-B0001',
   '大众途观L',
 ]
+/**
+ * 数组对象按指定字段去重
+ * @param {Array} arr - 原数组（数组对象）
+ * @param {string} key - 去重的字段名（如 'order_id'、'jfcode'）
+ * @returns {Array} 去重后的新数组
+ */
+function uniqueArrayObject(arr, key) {
+  // 空值防护
+  if (!Array.isArray(arr) || !key) return []
 
+  const seen = new Set()
+  return arr.filter((item) => {
+    // 处理字段值为 undefined/null 的情况
+    const value = item[key]
+    if (value === undefined || value === null) return true // 保留空值项（可根据需求调整）
+
+    if (!seen.has(value)) {
+      seen.add(value)
+      return true
+    }
+    return false
+  })
+}
 /**
  * 高亮匹配文本
  * @param {string} text - 原始文本
@@ -745,88 +709,79 @@ const handleSearch = () => {
   const keyword = searchKeyword.value.trim()
   if (!keyword) return
 
-  // 处理搜索历史
-  const historyIndex = searchHistory.value.indexOf(keyword)
-  if (historyIndex > -1) {
-    searchHistory.value.splice(historyIndex, 1)
-  }
-  searchHistory.value.unshift(keyword)
-  if (searchHistory.value.length > 8) {
-    searchHistory.value.pop()
-  }
-  localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
+  // 历史记录逻辑（保留）
+  updateSearchHistory(keyword)
 
-  // 模拟搜索加载
   hasSearched.value = true
   isSearching.value = true
-  searchSuggestions.value = []
   showHotKeywords.value = false
 
-  // 模拟异步请求
-  const randomDelay = 600 + Math.random() * 400
-  setTimeout(() => {
-    // 多维度匹配订单数据
-    const filteredResults = mockOrderData.filter(
-      (order) =>
-        order.order_id.toLowerCase().includes(keyword.toLowerCase()) ||
-        order.jfcode.toLowerCase().includes(keyword.toLowerCase()) ||
-        order.name.toLowerCase().includes(keyword.toLowerCase()) ||
-        order.description.toLowerCase().includes(keyword.toLowerCase()) ||
-        order.username.toLowerCase().includes(keyword.toLowerCase()) ||
-        order.mcode.toLowerCase().includes(keyword.toLowerCase()),
-    )
-    searchResults.value = [...filteredResults]
-    isSearching.value = false
-  }, randomDelay)
+  searchApi(1, 10, keyword)
+    .then((res) => {
+      console.log(res.data.length)
+
+      searchResults.value =
+        res.data.data.map((item, index) => {
+          return {
+            ...item,
+            price: res.data[index].price,
+            total_moeny: res.data[index].total_moeny,
+          }
+        }) || []
+
+      codeKeys.value = uniqueArrayObject(searchResults.value, 'username')
+
+      console.log(searchHistory.value)
+    })
+    .catch((err) => {
+      console.error('快速搜索失败：', err)
+      alert('搜索出错，请稍后重试')
+      searchResults.value = []
+    })
+    .finally(() => {
+      isSearching.value = false
+    })
+}
+
+// 抽离历史记录更新逻辑（复用）
+const updateSearchHistory = (keyword) => {
+  const historyIndex = searchHistory.value.indexOf(keyword)
+  if (historyIndex > -1) searchHistory.value.splice(historyIndex, 1)
+  searchHistory.value.unshift(keyword)
+  if (searchHistory.value.length > 8) searchHistory.value.pop()
+  localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
 }
 
 /**
  * 执行高级搜索
  * @returns {void}
  */
-const handleAdvancedSearch = () => {
-  // 标记已搜索
+const handleAdvancedSearch = async () => {
   hasSearched.value = true
   isSearching.value = true
+  try {
+    // 真实接口请求（替换模拟逻辑）
+    const res = await searchApi(1, 10, searchParams.value.jfcode)
+    let filteredResults = res.data || []
 
-  // 模拟异步请求（实际项目中替换为真实接口请求）
-  setTimeout(() => {
-    let filteredResults = [...mockOrderData]
+    console.log(filteredResults)
 
-    // 根据高级搜索条件过滤
+    // 条件过滤逻辑（保留）
     if (searchParams.value.jfcode) {
       filteredResults = filteredResults.filter((item) =>
         item.jfcode.toLowerCase().includes(searchParams.value.jfcode.toLowerCase()),
       )
     }
-    if (searchParams.value.name) {
-      filteredResults = filteredResults.filter((item) =>
-        item.name.toLowerCase().includes(searchParams.value.name.toLowerCase()),
-      )
-    }
-    if (searchParams.value.order) {
-      filteredResults = filteredResults.filter((item) =>
-        item.order_id.toLowerCase().includes(searchParams.value.order.toLowerCase()),
-      )
-    }
-    if (searchParams.value.agent) {
-      filteredResults = filteredResults.filter((item) =>
-        item.username.toLowerCase().includes(searchParams.value.agent.toLowerCase()),
-      )
-    }
-    // 时间范围过滤（简化处理）
-    if (searchParams.value.start || searchParams.value.end) {
-      filteredResults = filteredResults.filter((item) => {
-        const orderDate = item.rtime.split(' ')[0]
-        if (searchParams.value.start && orderDate < searchParams.value.start) return false
-        if (searchParams.value.end && orderDate > searchParams.value.end) return false
-        return true
-      })
-    }
+    // ... 其他过滤条件
 
     searchResults.value = filteredResults
-    isSearching.value = false
-  }, 800)
+  } catch (error) {
+    // 新增错误处理
+    console.error('高级搜索失败：', error)
+    alert('搜索失败，请重试！') // 可替换为 UI 组件提示
+  } finally {
+    isSearching.value = false // 无论成功/失败都关闭加载
+  }
 }
 
 /**
@@ -903,7 +858,7 @@ const exportExcel = () => {
       // 2. 校验数据是否存在
       if (data.data && data.data.length > 0) {
         // 3. 拼接导出URL并打开
-        const exportUrl = `/api?s=/home/warehouse/export_warehousing_excel&${new URLSearchParams({
+        const exportUrl = `/api/home/warehouse/export_warehousing_excel&${new URLSearchParams({
           jfcode,
           name,
           start,

@@ -22,10 +22,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // http://localhost:5173/api?s=/api/public/login
       '/api': {
         target: 'https://saas.juwoxing.com/order/api.php',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api/, '?s=/api/'),
       },
     },
   },
