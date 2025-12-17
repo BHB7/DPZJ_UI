@@ -154,7 +154,19 @@
           搜索
         </button>
       </div>
-
+      <div class="flex justify-around items-center h-10">
+        <h2>所有供应商代码</h2>
+        <div class="codes flex flex-wrap justify-center items-center">
+          <div
+            v-for="(item, index) in codeKeys"
+            :key="item.rtime"
+            class="badge badge-soft py-1 mx-1"
+            :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
+          >
+            {{ jscodes[item.username] || item.username }}
+          </div>
+        </div>
+      </div>
       <!-- 搜索建议/历史 -->
       <div
         v-if="showSuggestions && (searchSuggestions.length > 0 || searchHistory.length > 0)"
@@ -261,16 +273,6 @@
 
       <!-- 订单卡片列表 -->
       <div class="grid grid-cols-1 gap-6">
-        <div class="codes flex flex-wrap justify-center items-center">
-          <div
-            v-for="(item, index) in codeKeys"
-            :key="item.rtime"
-            class="badge badge-soft py-1 mx-1"
-            :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
-          >
-            {{ jscodes[item.username] || item.username }}
-          </div>
-        </div>
         <div
           v-for="(order, index) in searchResults"
           :key="index"
@@ -566,25 +568,41 @@ const mockSuggestions = [
   '大众途观L',
 ]
 /**
- * 数组对象按指定字段去重
+ * 数组对象去重（按指定key）+ 保留rsum为负数的项（即使key重复）
  * @param {Array} arr - 原数组（数组对象）
- * @param {string} key - 去重的字段名（如 'order_id'、'jfcode'）
- * @returns {Array} 去重后的新数组
+ * @param {string} key - 去重的字段名
+ * @returns {Array} 处理后的数组
  */
-function uniqueArrayObject(arr, key) {
-  // 空值防护
+function uniqueArrayWithNegativeRsum(arr, key) {
   if (!Array.isArray(arr) || !key) return []
 
   const seen = new Set()
-  return arr.filter((item) => {
-    // 处理字段值为 undefined/null 的情况
-    const value = item[key]
-    if (value === undefined || value === null) return true // 保留空值项（可根据需求调整）
+  // 辅助函数：判断rsum是否为负数（兼容字符串/数字类型）
+  const isRsumNegative = (item) => {
+    const rsum = Number(item.rsum)
+    return !isNaN(rsum) && rsum < 0 && rsum.toString() !== '0' // 排除-0
+  }
 
+  return arr.filter((item) => {
+    const value = item[key]
+
+    // 规则1：rsum为负数 → 强制保留（无论key是否重复）
+    if (isRsumNegative(item)) {
+      return true
+    }
+
+    // 规则2：key为空值（undefined/null）→ 保留（可根据需求调整）
+    if (value === undefined || value === null) {
+      return true
+    }
+
+    // 规则3：key未出现过 → 保留并记录
     if (!seen.has(value)) {
       seen.add(value)
       return true
     }
+
+    // 规则4：key重复且rsum非负 → 过滤
     return false
   })
 }
@@ -729,7 +747,7 @@ const handleSearch = () => {
           }
         }) || []
 
-      codeKeys.value = uniqueArrayObject(searchResults.value, 'username')
+      codeKeys.value = uniqueArrayWithNegativeRsum(searchResults.value, 'username')
 
       console.log(searchHistory.value)
     })
