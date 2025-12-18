@@ -497,7 +497,6 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
 import { searchApi } from '@/api'
-import badge from 'daisyui/components/badge'
 // 假设已引入jQuery和layer（如果项目中已存在，可忽略）
 // import $ from 'jquery'
 // import layer from 'layui-layer'
@@ -522,7 +521,7 @@ const searchParams = ref({
   agent: '', // 代理商/仓库
 })
 // 供应商去重后的搜索列表
-const codeKeys = ref()
+const codeKeys = ref([])
 // 响应式数据 - 搜索建议列表
 const searchSuggestions = ref([])
 // 响应式数据 - 搜索历史记录
@@ -567,45 +566,7 @@ const mockSuggestions = [
   'VW-B0001',
   '大众途观L',
 ]
-/**
- * 数组对象去重（按指定key）+ 保留rsum为负数的项（即使key重复）
- * @param {Array} arr - 原数组（数组对象）
- * @param {string} key - 去重的字段名
- * @returns {Array} 处理后的数组
- */
-function uniqueArrayWithNegativeRsum(arr, key) {
-  if (!Array.isArray(arr) || !key) return []
 
-  const seen = new Set()
-  // 辅助函数：判断rsum是否为负数（兼容字符串/数字类型）
-  const isRsumNegative = (item) => {
-    const rsum = Number(item.rsum)
-    return !isNaN(rsum) && rsum < 0 && rsum.toString() !== '0' // 排除-0
-  }
-
-  return arr.filter((item) => {
-    const value = item[key]
-
-    // 规则1：rsum为负数 → 强制保留（无论key是否重复）
-    if (isRsumNegative(item)) {
-      return true
-    }
-
-    // 规则2：key为空值（undefined/null）→ 保留（可根据需求调整）
-    if (value === undefined || value === null) {
-      return true
-    }
-
-    // 规则3：key未出现过 → 保留并记录
-    if (!seen.has(value)) {
-      seen.add(value)
-      return true
-    }
-
-    // 规则4：key重复且rsum非负 → 过滤
-    return false
-  })
-}
 /**
  * 高亮匹配文本
  * @param {string} text - 原始文本
@@ -737,9 +698,13 @@ const handleSearch = () => {
   searchApi(1, 10, keyword)
     .then((res) => {
       console.log(res.data.length)
-
+      let netArr = []
       searchResults.value =
         res.data.data.map((item, index) => {
+          if (Number(res.data[index].rsum) > 0) {
+            codeKeys.value.push(res.data[index])
+          }
+
           return {
             ...item,
             price: res.data[index].price,
@@ -747,9 +712,7 @@ const handleSearch = () => {
           }
         }) || []
 
-      codeKeys.value = uniqueArrayWithNegativeRsum(searchResults.value, 'username')
-
-      console.log(searchHistory.value)
+      console.log(netArr)
     })
     .catch((err) => {
       console.error('快速搜索失败：', err)
