@@ -3,6 +3,8 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginApi } from '@/api/index'
 import { useUserStore } from '@/stores/user'
+import { alertSuccess } from '@/utils/alertPopup'
+
 const userStore = useUserStore()
 const router = useRouter()
 // 表单数据
@@ -46,7 +48,7 @@ const handleLogin = async () => {
     console.log(userInfo)
 
     // 登录成功逻辑
-    alert('登录成功！')
+    alertSuccess('登录成功！')
     // 这里可以添加路由跳转逻辑
     userStore.setUserInfo(userInfo.data.msg.data)
     router.push('/')

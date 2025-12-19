@@ -2,7 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import '@/styles/app.css'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate' // 建议使用完整名称，更清晰
-
+import alertPlugin from '@/utils/alertPopup'
 import App from './App.vue'
 import router from './router'
 
@@ -17,5 +17,6 @@ const app = createApp(App)
 // 3. 按顺序使用插件：先Pinia，后Router
 app.use(pinia)
 app.use(router)
-
+// 注册弹窗插件
+app.use(alertPlugin)
 app.mount('#app')

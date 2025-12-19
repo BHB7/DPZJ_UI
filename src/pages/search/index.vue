@@ -154,7 +154,7 @@
           搜索
         </button>
       </div>
-      <div class="flex justify-around items-center h-10">
+      <div class="flex h-10 flex-wrap">
         <h2>所有供应商代码</h2>
         <div class="codes flex flex-wrap justify-center items-center">
           <div
@@ -697,8 +697,7 @@ const handleSearch = () => {
 
   searchApi(1, 10, keyword)
     .then((res) => {
-      console.log(res.data.length)
-      let netArr = []
+      codeKeys.value = []
       searchResults.value =
         res.data.data.map((item, index) => {
           if (Number(res.data[index].rsum) > 0) {
@@ -712,7 +711,26 @@ const handleSearch = () => {
           }
         }) || []
 
-      console.log(netArr)
+      let temp = []
+      codeKeys.value.forEach((item, index) => {
+        // 空值防御：跳过空项
+        if (!item) return
+
+        // 条件1：索引 ≤ 1 → 直接保留
+        if (index <= 1) {
+          temp.push(item)
+        } else {
+          // 条件2：索引 > 1 → 对比前一项用户名（避免索引越界）
+          const prevItem = temp[temp.length - 1] // 取temp中最后一项（即前一个保留的项）
+          // 若前一项不存在，或当前项用户名≠前一项 → 保留
+          if (!prevItem || item.username !== prevItem.username) {
+            temp.push(item)
+          }
+          // 否则（用户名相同）→ 不推入，实现去重
+        }
+      })
+      console.log('最终temp数组：', temp.reverse())
+      codeKeys.value = temp
     })
     .catch((err) => {
       console.error('快速搜索失败：', err)
