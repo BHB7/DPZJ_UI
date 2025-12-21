@@ -50,7 +50,7 @@ const handleLogin = async () => {
     // 登录成功逻辑
     alertSuccess('登录成功！')
     // 这里可以添加路由跳转逻辑
-    userStore.setUserInfo(userInfo.data.msg.data)
+    userStore.setUserInfo(userInfo.msg.data)
     router.push('/')
   } catch (error) {
     alert(error)
