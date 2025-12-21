@@ -2,13 +2,14 @@
 import { useRouter } from 'vue-router'
 import LineMdHomeMd from '~icons/line-md/home-md'
 import LineMdSearchTwotone from '~icons/line-md/search-twotone'
+import LineMdCogLoop from '~icons/line-md/cog-loop'
 const router = useRouter()
 
 // 导航配置
 const navItems = [
   { path: '/layout/home', label: '首页', icon: LineMdHomeMd },
   { path: '/layout/search', label: '搜索', icon: LineMdSearchTwotone },
-  { path: '/layout/settings', label: 'Settings', icon: LineMdHomeMd },
+  { path: '/layout/toolBox', label: '工具箱', icon: LineMdCogLoop },
 ]
 
 const navigateTo = (path) => {
