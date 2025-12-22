@@ -18,6 +18,10 @@ const router = createRouter({
           path: 'search',
           component: () => import('@/pages/search/index.vue'),
         },
+        {
+          path: 'tools',
+          component: () => import('@/pages/tools/index.vue'),
+        },
       ],
     },
     {

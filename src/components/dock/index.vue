@@ -9,7 +9,7 @@ const router = useRouter()
 const navItems = [
   { path: '/layout/home', label: '首页', icon: LineMdHomeMd },
   { path: '/layout/search', label: '搜索', icon: LineMdSearchTwotone },
-  { path: '/layout/toolBox', label: '工具箱', icon: LineMdCogLoop },
+  { path: '/layout/tools', label: '实用工具', icon: LineMdCogLoop },
 ]
 
 const navigateTo = (path) => {

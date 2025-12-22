@@ -505,7 +505,7 @@ import { alertError, alertWarning } from '@/utils/alertPopup'
 /**
  * @file SearchPage.vue
  * @description 汽配入库订单搜索页面（集成Excel导出功能）
- * @author 豆包编程助手
+ * @author 7z
  * @date 2025-12-14
  * @features Excel导出、高级搜索、暗黑主题适配、卡片式展示
  */

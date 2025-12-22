@@ -9,7 +9,7 @@ import Icons from 'unplugin-icons/vite'
 export default defineConfig({
   plugins: [
     vue(),
-    vueDevTools(),
+    // vueDevTools(),
     tailwindcss(),
     Icons({
       autoInstall: true,
@@ -21,6 +21,9 @@ export default defineConfig({
     },
   },
   server: {
+    port: 80,
+    host: true,
+    open: true,
     proxy: {
       // http://localhost:5173/api?s=/api/public/login
       '/api': {
