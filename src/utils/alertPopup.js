@@ -13,6 +13,8 @@ let container = null
  * @param {number} [options.duration=3000] - 自动关闭时间
  */
 export const showAlert = (options) => {
+  console.log(options)
+
   // 创建容器（首次调用初始化）
   if (!container) {
     container = document.createElement('div')

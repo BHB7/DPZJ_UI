@@ -3,7 +3,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginApi } from '@/api/index'
 import { useUserStore } from '@/stores/user'
-import { alertSuccess } from '@/utils/alertPopup'
+import { alertError, alertSuccess } from '@/utils/alertPopup'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -28,8 +28,6 @@ const validateForm = () => {
 
   if (!form.password) {
     newErrors.password = '密码不能为空'
-  } else if (form.password.length < 6) {
-    newErrors.password = '密码长度不能少于6位'
   }
 
   Object.assign(errors, newErrors)
@@ -53,7 +51,7 @@ const handleLogin = async () => {
     userStore.setUserInfo(userInfo.msg.data)
     router.push('/')
   } catch (error) {
-    alert(error)
+    alertError(error)
   } finally {
     loading.value = false
   }

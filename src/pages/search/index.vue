@@ -497,7 +497,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
 import { searchApi } from '@/api'
-import { alertError, alertWarning } from '@/utils/alertPopup'
+import { alertError } from '@/utils/alertPopup'
 // 假设已引入jQuery和layer（如果项目中已存在，可忽略）
 // import $ from 'jquery'
 // import layer from 'layui-layer'

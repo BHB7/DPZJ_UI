@@ -3,8 +3,9 @@
   <div class="alert-wrapper" v-if="visible">
     <div
       :class="[
+        'alert-outline',
         'alert',
-        `alert-${type}`,
+        `alert-${props.type}`,
         'shadow-md',
         'transition-all',
         'duration-300',
@@ -89,6 +90,7 @@ watch(
 
 // 自动关闭逻辑
 onMounted(() => {
+  console.log(props.type)
   if (props.duration > 0) {
     setTimeout(close, props.duration)
   }

@@ -7,7 +7,7 @@ import request from '@/http/request'
  * @param { String } code
  * @returns []
  */
-export const searchApi = (page = 1, limit = 10, code) => {
+export const searchApi = (page = 1, limit = 20, code) => {
   return request.get(
     `/api/warehouse/get_warehousing_detail&jfcode=${code}&name=&start=&end=&order=&agent=&${page}&${limit}`,
   )
