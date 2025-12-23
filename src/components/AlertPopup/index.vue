@@ -3,7 +3,7 @@
   <div class="alert-wrapper" v-if="visible">
     <div
       :class="[
-        'alert-outline',
+        'alert-soft',
         'alert',
         `alert-${props.type}`,
         'shadow-md',

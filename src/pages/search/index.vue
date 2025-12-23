@@ -1,3 +1,344 @@
+<script setup>
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { debounce } from 'lodash-es'
+import jscodes from '@/stores/jfcodes.json'
+import { searchApi, searchInfoApi } from '@/api'
+import { alertError } from '@/utils/alertPopup'
+// 假设已引入jQuery和layer（如果项目中已存在，可忽略）
+// import $ from 'jquery'
+// import layer from 'layui-layer'
+
+/**
+ * @file SearchPage.vue
+ * @description 汽配入库订单搜索页面（集成Excel导出功能）
+ * @author 7z
+ * @date 2025-12-14
+ * @features Excel导出、高级搜索、暗黑主题适配、卡片式展示
+ */
+
+// 响应式数据 - 搜索关键词
+const searchKeyword = ref('')
+// 响应式数据 - 高级搜索参数（对应导出接口参数）
+const searchParams = ref({
+  jfcode: '', // 配件编码
+  start: '', // 开始时间
+  end: '', // 结束时间
+  order: '', // 订单号
+  agent: '', // 代理商/仓库
+})
+// 供应商去重后的搜索列表
+const codeKeys = ref([])
+// 响应式数据 - 搜索建议列表
+const searchSuggestions = ref([])
+// 响应式数据 - 搜索历史记录
+const searchHistory = ref([])
+// 响应式数据 - 搜索结果列表
+const searchResults = ref([])
+// 响应式数据 - 搜索加载状态
+const isSearching = ref(false)
+// 响应式数据 - 是否已执行搜索
+const hasSearched = ref(false)
+// 响应式数据 - 排序类型
+const sortType = ref('relevance')
+// 响应式数据 - 是否为深色主题
+const isDarkTheme = ref(false)
+// 响应式数据 - 是否显示搜索建议框
+const showSuggestions = ref(true)
+// 响应式数据 - 键盘导航选中的建议索引
+const activeSuggestionIndex = ref(-1)
+// 响应式数据 - 是否显示热门关键词
+const showHotKeywords = ref(false)
+// 库位
+const codeKey = ref('')
+
+// 热门关键词（业务定制）
+const hotKeywords = ref(['正辉', '全贸', '飞众', '展基'])
+
+// 模拟搜索建议数据
+const mockSuggestions = ['XD-C0042']
+
+/**
+ * 高亮匹配文本
+ * @param {string} text - 原始文本
+ * @returns {string} 高亮后的HTML文本
+ */
+const highlightMatch = (text) => {
+  if (!searchKeyword.value) return text
+  const reg = new RegExp(`(${searchKeyword.value})`, 'gi')
+  return text.replace(
+    reg,
+    `<span class="text-primary font-medium dark:text-primary">${searchKeyword.value}</span>`,
+  )
+}
+
+/**
+ * 处理快速搜索输入事件
+ * @returns {void}
+ */
+const handleInput = () => {
+  if (!searchKeyword.value.trim()) {
+    searchSuggestions.value = []
+    activeSuggestionIndex.value = -1
+    return
+  }
+  // 过滤匹配的建议
+  searchSuggestions.value = mockSuggestions.filter((item) =>
+    item.toLowerCase().includes(searchKeyword.value.toLowerCase()),
+  )
+}
+
+// 防抖处理后的输入事件
+const handleInputDebounced = debounce(handleInput, 300)
+
+/**
+ * 键盘导航搜索建议
+ * @param {number} direction - 导航方向（1:下，-1:上）
+ * @returns {void}
+ */
+const navigateSuggestions = (direction) => {
+  const total = searchSuggestions.value.length + searchHistory.value.length
+  if (total === 0) return
+
+  activeSuggestionIndex.value += direction
+
+  // 循环导航边界处理
+  if (activeSuggestionIndex.value >= total) activeSuggestionIndex.value = 0
+  if (activeSuggestionIndex.value < 0) activeSuggestionIndex.value = total - 1
+
+  // 滚动到选中项
+  const activeEl = document.querySelector(
+    `[class*="activeSuggestionIndex === ${activeSuggestionIndex.value}"]`,
+  )
+  if (activeEl) {
+    activeEl.scrollIntoView({ block: 'nearest' })
+  }
+}
+
+/**
+ * 关闭搜索建议框
+ * @returns {void}
+ */
+const closeSuggestions = () => {
+  showSuggestions.value = false
+  setTimeout(() => {
+    showSuggestions.value = true
+    activeSuggestionIndex.value = -1
+  }, 100)
+}
+
+/**
+ * 清空快速搜索关键词
+ * @returns {void}
+ */
+const clearKeyword = () => {
+  searchKeyword.value = ''
+  searchSuggestions.value = []
+  activeSuggestionIndex.value = -1
+}
+
+/**
+ * 清空所有搜索条件
+ * @returns {void}
+ */
+const clearAll = () => {
+  searchKeyword.value = ''
+  searchParams.value = {
+    jfcode: '',
+    name: '',
+    start: '',
+    end: '',
+    order: '',
+    agent: '',
+  }
+  searchSuggestions.value = []
+  activeSuggestionIndex.value = -1
+  hasSearched.value = false
+  searchResults.value = []
+}
+
+/**
+ * 选择搜索建议
+ * @param {string} keyword - 选中的关键词
+ * @returns {void}
+ */
+const selectSuggestion = (keyword) => {
+  searchParams.value.agent = keyword
+  showSuggestions.value = false
+  setTimeout(() => {
+    handleSearch()
+    showSuggestions.value = true
+  }, 100)
+}
+
+/**
+ * 执行快速搜索
+ * @returns {void}
+ */
+const handleSearch = () => {
+  const keyword = searchKeyword.value.trim()
+  // if (!searchParams.value.agent && !keyword) return
+
+  // 历史记录逻辑（保留）
+  updateSearchHistory(keyword)
+
+  hasSearched.value = true
+  isSearching.value = true
+  showHotKeywords.value = false
+
+  const p1 = searchApi(
+    1,
+    10,
+    keyword,
+    searchParams.value.start,
+    searchParams.value.end,
+    searchParams.value.agent,
+  )
+    .then((res) => {
+      codeKeys.value = []
+      searchResults.value =
+        res.data.map((item, index) => {
+          if (Number(res.data[index].rsum) > 0) {
+            codeKeys.value.push(res.data[index].username)
+          }
+
+          return {
+            ...item,
+            price: res.data[index].price,
+            total_moeny: res.data[index].total_moeny,
+          }
+        }) || []
+      codeKeys.value = [...new Set(codeKeys.value)]
+    })
+    .catch((err) => {
+      console.error('快速搜索失败：', err)
+      alertError('搜索出错，请稍后重试')
+      searchResults.value = []
+    })
+    .finally(() => {
+      isSearching.value = false
+    })
+
+  const p2 = searchInfoApi(searchKeyword.value).then((res) => {
+    console.log(res.data)
+    codeKey.value = res.data[0].number
+  })
+
+  Promise.all([p1, p2])
+}
+
+// 抽离历史记录更新逻辑（复用）
+const updateSearchHistory = (keyword) => {
+  const historyIndex = searchHistory.value.indexOf(keyword)
+  if (historyIndex > -1) searchHistory.value.splice(historyIndex, 1)
+  searchHistory.value.unshift(keyword)
+  if (searchHistory.value.length > 8) searchHistory.value.pop()
+  localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
+}
+/**
+ * 排序搜索结果
+ * @returns {void}
+ */
+const sortResults = () => {
+  if (sortType.value === 'relevance') {
+    handleSearch()
+  } else if (sortType.value === 'time') {
+    // 按入库时间降序
+    searchResults.value = [...searchResults.value].sort(
+      (a, b) => new Date(b.rtime) - new Date(a.rtime),
+    )
+  } else if (sortType.value === 'price') {
+    // 按单价降序
+    searchResults.value = [...searchResults.value].sort(
+      (a, b) => parseFloat(b.price) - parseFloat(a.price),
+    )
+  }
+}
+
+/**
+ * 导出Excel功能（适配你的原有接口）
+ * @description 完全兼容原有导出逻辑，先校验数据再跳转导出接口
+ * @returns {void}
+ */
+const exportExcel = () => {
+  // 获取导出参数
+  const { jfcode, name, start, end, order, agent } = searchParams.value
+  console.log('导出')
+
+  console.log(jfcode, name, start, end, agent, order)
+}
+
+/**
+ * 点击空白处关闭建议框
+ * @param {MouseEvent} e - 鼠标事件对象
+ * @returns {void}
+ */
+const handleClickOutside = (e) => {
+  const searchContainer = document.querySelector('.group')
+  if (searchContainer && !searchContainer.contains(e.target)) {
+    showSuggestions.value = false
+    setTimeout(() => {
+      showSuggestions.value = true
+      activeSuggestionIndex.value = -1
+    }, 100)
+  }
+}
+
+/**
+ * 组件挂载钩子
+ * @returns {void}
+ */
+onMounted(() => {
+  // 恢复历史记录
+  const savedHistory = localStorage.getItem('searchHistory')
+  if (savedHistory) {
+    searchHistory.value = JSON.parse(savedHistory)
+  }
+
+  // 恢复主题设置
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme === 'dark') {
+    isDarkTheme.value = true
+    document.documentElement.classList.add('dark')
+  }
+
+  // 绑定全局点击事件
+  document.addEventListener('click', handleClickOutside)
+
+  // 引入Font Awesome图标
+  if (!document.querySelector('link[href*="font-awesome"]')) {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css'
+    document.head.appendChild(link)
+  }
+})
+
+/**
+ * 组件卸载钩子
+ * @returns {void}
+ */
+onUnmounted(() => {
+  // 移除全局点击监听
+  document.removeEventListener('click', handleClickOutside)
+  // 取消防抖函数
+  handleInputDebounced.cancel()
+})
+
+/**
+ * 监听搜索关键词变化
+ * @param {string} newVal - 新的关键词值
+ * @returns {void}
+ */
+watch(searchKeyword, (newVal) => {
+  if (newVal) {
+    showSuggestions.value = true
+  }
+})
+
+defineOptions({
+  name: 'searchPage',
+})
+</script>
 <template>
   <div class="container mx-auto px-4 py-8 max-w-6xl">
     <!-- 页面标题 -->
@@ -39,12 +380,12 @@
         </div>
         <!-- 配件名称 -->
         <div class="form-control">
-          <label class="label text-sm">配件名称</label>
+          <label class="label text-sm">配件厂家</label>
           <input
-            v-model="searchParams.name"
+            v-model="searchParams.agent"
             type="text"
             class="input input-sm bg-base-100 dark:bg-base-400 text-base-content dark:text-white"
-            placeholder="如：控制臂前下左"
+            placeholder="如：正辉"
           />
         </div>
         <!-- 开始时间 -->
@@ -85,11 +426,6 @@
             placeholder="如：哈尔滨仓"
           />
         </div>
-      </div>
-      <div class="mt-4 flex justify-center">
-        <button class="btn btn-primary" @click="handleAdvancedSearch">
-          <i class="fa-solid fa-search mr-2"></i> 高级搜索
-        </button>
       </div>
     </div>
 
@@ -155,6 +491,7 @@
         </button>
       </div>
       <div class="flex h-20 px-5 items-center flex-wrap">
+        <p class="mt-5 font-bold text-primary">库位:{{ codeKey }}</p>
         <h2 class="w-full font-bold py-5">所有供应商代码</h2>
         <div class="codes flex-1 flex-wrap justify-center items-center">
           <div
@@ -164,54 +501,6 @@
             :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
           >
             {{ jscodes[item] || item }}
-          </div>
-        </div>
-      </div>
-      <!-- 搜索建议/历史 -->
-      <div
-        v-if="showSuggestions && (searchSuggestions.length > 0 || searchHistory.length > 0)"
-        class="absolute top-full left-0 right-0 mt-2 bg-base-100 dark:bg-base-300 rounded-xl shadow-xl z-50 overflow-hidden animate-slide-down border border-base-200 dark:border-base-400"
-      >
-        <!-- 搜索建议 -->
-        <div v-if="searchSuggestions.length > 0" class="p-2 border-b dark:border-base-200">
-          <p class="text-sm text-base-content/70 dark:text-white/70 mb-1 px-1">搜索建议</p>
-          <div
-            v-for="(suggestion, index) in searchSuggestions"
-            :key="`suggest-${index}`"
-            class="px-3 py-3 hover:bg-base-200 dark:hover:bg-base-200 cursor-pointer rounded-lg m-1 transition-colors text-base-content dark:text-white"
-            :class="{ 'bg-primary/10 dark:bg-primary/20': activeSuggestionIndex === index }"
-            @click="selectSuggestion(suggestion)"
-            @mouseenter="activeSuggestionIndex = index"
-          >
-            <span v-html="highlightMatch(suggestion)"></span>
-          </div>
-        </div>
-
-        <!-- 搜索历史 -->
-        <div v-if="searchHistory.length > 0" class="p-2">
-          <div class="flex justify-between items-center mb-1 px-1">
-            <p class="text-sm text-base-content/70 dark:text-white/70">最近搜索</p>
-            <button
-              class="text-xs text-primary hover:text-primary/80 transition-colors"
-              @click="clearHistory"
-            >
-              清空历史
-            </button>
-          </div>
-          <div
-            v-for="(history, index) in searchHistory"
-            :key="`history-${index}`"
-            class="px-3 py-3 hover:bg-base-200 dark:hover:bg-base-200 cursor-pointer rounded-lg m-1 transition-colors flex justify-between items-center text-base-content dark:text-white"
-            @click="selectSuggestion(history)"
-          >
-            <span v-html="highlightMatch(history)"></span>
-            <button
-              class="text-xs text-base-content/50 dark:text-white/50 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20"
-              @click.stop="deleteHistory(index)"
-              aria-label="删除记录"
-            >
-              ×
-            </button>
           </div>
         </div>
       </div>
@@ -491,481 +780,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { debounce } from 'lodash-es'
-import jscodes from '@/stores/jfcodes.json'
-import { searchApi } from '@/api'
-import { alertError } from '@/utils/alertPopup'
-// 假设已引入jQuery和layer（如果项目中已存在，可忽略）
-// import $ from 'jquery'
-// import layer from 'layui-layer'
-
-/**
- * @file SearchPage.vue
- * @description 汽配入库订单搜索页面（集成Excel导出功能）
- * @author 7z
- * @date 2025-12-14
- * @features Excel导出、高级搜索、暗黑主题适配、卡片式展示
- */
-
-// 响应式数据 - 搜索关键词
-const searchKeyword = ref('')
-// 响应式数据 - 高级搜索参数（对应导出接口参数）
-const searchParams = ref({
-  jfcode: '', // 配件编码
-  name: '', // 配件名称
-  start: '', // 开始时间
-  end: '', // 结束时间
-  order: '', // 订单号
-  agent: '', // 代理商/仓库
-})
-// 供应商去重后的搜索列表
-const codeKeys = ref([])
-// 响应式数据 - 搜索建议列表
-const searchSuggestions = ref([])
-// 响应式数据 - 搜索历史记录
-const searchHistory = ref([])
-// 响应式数据 - 搜索结果列表
-const searchResults = ref([])
-// 响应式数据 - 搜索加载状态
-const isSearching = ref(false)
-// 响应式数据 - 是否已执行搜索
-const hasSearched = ref(false)
-// 响应式数据 - 排序类型
-const sortType = ref('relevance')
-// 响应式数据 - 是否为深色主题
-const isDarkTheme = ref(false)
-// 响应式数据 - 是否显示搜索建议框
-const showSuggestions = ref(true)
-// 响应式数据 - 键盘导航选中的建议索引
-const activeSuggestionIndex = ref(-1)
-// 响应式数据 - 是否显示热门关键词
-const showHotKeywords = ref(false)
-
-// 热门关键词（业务定制）
-const hotKeywords = ref([
-  'ZR20251212',
-  'AD-C0001',
-  '奥迪Q7L',
-  '控制臂',
-  '哈尔滨仓',
-  '独立采购入库',
-  '中性配件',
-  '已入库',
-])
-
-// 模拟搜索建议数据
-const mockSuggestions = [
-  'ZR20251212',
-  'AD-C0001',
-  '奥迪Q7L',
-  '控制臂前下左',
-  '哈尔滨仓',
-  '独立采购入库',
-  'VW-B0001',
-  '大众途观L',
-]
-
-/**
- * 高亮匹配文本
- * @param {string} text - 原始文本
- * @returns {string} 高亮后的HTML文本
- */
-const highlightMatch = (text) => {
-  if (!searchKeyword.value) return text
-  const reg = new RegExp(`(${searchKeyword.value})`, 'gi')
-  return text.replace(
-    reg,
-    `<span class="text-primary font-medium dark:text-primary">${searchKeyword.value}</span>`,
-  )
-}
-
-/**
- * 处理快速搜索输入事件
- * @returns {void}
- */
-const handleInput = () => {
-  if (!searchKeyword.value.trim()) {
-    searchSuggestions.value = []
-    activeSuggestionIndex.value = -1
-    return
-  }
-  // 过滤匹配的建议
-  searchSuggestions.value = mockSuggestions.filter((item) =>
-    item.toLowerCase().includes(searchKeyword.value.toLowerCase()),
-  )
-}
-
-// 防抖处理后的输入事件
-const handleInputDebounced = debounce(handleInput, 300)
-
-/**
- * 键盘导航搜索建议
- * @param {number} direction - 导航方向（1:下，-1:上）
- * @returns {void}
- */
-const navigateSuggestions = (direction) => {
-  const total = searchSuggestions.value.length + searchHistory.value.length
-  if (total === 0) return
-
-  activeSuggestionIndex.value += direction
-
-  // 循环导航边界处理
-  if (activeSuggestionIndex.value >= total) activeSuggestionIndex.value = 0
-  if (activeSuggestionIndex.value < 0) activeSuggestionIndex.value = total - 1
-
-  // 滚动到选中项
-  const activeEl = document.querySelector(
-    `[class*="activeSuggestionIndex === ${activeSuggestionIndex.value}"]`,
-  )
-  if (activeEl) {
-    activeEl.scrollIntoView({ block: 'nearest' })
-  }
-}
-
-/**
- * 关闭搜索建议框
- * @returns {void}
- */
-const closeSuggestions = () => {
-  showSuggestions.value = false
-  setTimeout(() => {
-    showSuggestions.value = true
-    activeSuggestionIndex.value = -1
-  }, 100)
-}
-
-/**
- * 清空快速搜索关键词
- * @returns {void}
- */
-const clearKeyword = () => {
-  searchKeyword.value = ''
-  searchSuggestions.value = []
-  activeSuggestionIndex.value = -1
-}
-
-/**
- * 清空所有搜索条件
- * @returns {void}
- */
-const clearAll = () => {
-  searchKeyword.value = ''
-  searchParams.value = {
-    jfcode: '',
-    name: '',
-    start: '',
-    end: '',
-    order: '',
-    agent: '',
-  }
-  searchSuggestions.value = []
-  activeSuggestionIndex.value = -1
-  hasSearched.value = false
-  searchResults.value = []
-}
-
-/**
- * 选择搜索建议
- * @param {string} keyword - 选中的关键词
- * @returns {void}
- */
-const selectSuggestion = (keyword) => {
-  searchKeyword.value = keyword
-  showSuggestions.value = false
-  setTimeout(() => {
-    handleSearch()
-    showSuggestions.value = true
-  }, 100)
-}
-
-/**
- * 执行快速搜索
- * @returns {void}
- */
-const handleSearch = () => {
-  const keyword = searchKeyword.value.trim()
-  if (!keyword) return
-
-  // 历史记录逻辑（保留）
-  updateSearchHistory(keyword)
-
-  hasSearched.value = true
-  isSearching.value = true
-  showHotKeywords.value = false
-
-  searchApi(1, 10, keyword)
-    .then((res) => {
-      codeKeys.value = []
-      searchResults.value =
-        res.data.map((item, index) => {
-          if (Number(res.data[index].rsum) > 0) {
-            codeKeys.value.push(res.data[index].username)
-          }
-
-          return {
-            ...item,
-            price: res.data[index].price,
-            total_moeny: res.data[index].total_moeny,
-          }
-        }) || []
-      codeKeys.value = [...new Set(codeKeys.value)]
-    })
-    .catch((err) => {
-      console.error('快速搜索失败：', err)
-      alertError('搜索出错，请稍后重试')
-      searchResults.value = []
-    })
-    .finally(() => {
-      isSearching.value = false
-    })
-}
-
-// 抽离历史记录更新逻辑（复用）
-const updateSearchHistory = (keyword) => {
-  const historyIndex = searchHistory.value.indexOf(keyword)
-  if (historyIndex > -1) searchHistory.value.splice(historyIndex, 1)
-  searchHistory.value.unshift(keyword)
-  if (searchHistory.value.length > 8) searchHistory.value.pop()
-  localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
-}
-
-/**
- * 执行高级搜索
- * @returns {void}
- */
-const handleAdvancedSearch = async () => {
-  hasSearched.value = true
-  isSearching.value = true
-  try {
-    // 真实接口请求（替换模拟逻辑）
-    const res = await searchApi(1, 10, searchParams.value.jfcode)
-    let filteredResults = res.data || []
-
-    console.log(filteredResults)
-
-    // 条件过滤逻辑（保留）
-    if (searchParams.value.jfcode) {
-      filteredResults = filteredResults.filter((item) =>
-        item.jfcode.toLowerCase().includes(searchParams.value.jfcode.toLowerCase()),
-      )
-    }
-    // ... 其他过滤条件
-
-    searchResults.value = filteredResults
-  } catch (error) {
-    // 新增错误处理
-    console.error('高级搜索失败：', error)
-    alert('搜索失败，请重试！') // 可替换为 UI 组件提示
-  } finally {
-    isSearching.value = false // 无论成功/失败都关闭加载
-  }
-}
-
-/**
- * 排序搜索结果
- * @returns {void}
- */
-const sortResults = () => {
-  if (sortType.value === 'relevance') {
-    handleSearch()
-  } else if (sortType.value === 'time') {
-    // 按入库时间降序
-    searchResults.value = [...searchResults.value].sort(
-      (a, b) => new Date(b.rtime) - new Date(a.rtime),
-    )
-  } else if (sortType.value === 'price') {
-    // 按单价降序
-    searchResults.value = [...searchResults.value].sort(
-      (a, b) => parseFloat(b.price) - parseFloat(a.price),
-    )
-  }
-}
-
-/**
- * 清空搜索历史
- * @returns {void}
- */
-const clearHistory = () => {
-  if (confirm('确定要清空搜索历史吗？')) {
-    searchHistory.value = []
-    localStorage.removeItem('searchHistory')
-  }
-}
-
-/**
- * 删除单条搜索历史
- * @param {number} index - 历史记录索引
- * @returns {void}
- */
-const deleteHistory = (index) => {
-  searchHistory.value.splice(index, 1)
-  localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
-}
-
-/**
- * 导出Excel功能（适配你的原有接口）
- * @description 完全兼容原有导出逻辑，先校验数据再跳转导出接口
- * @returns {void}
- */
-const exportExcel = () => {
-  // 获取导出参数
-  const { jfcode, name, start, end, order, agent } = searchParams.value
-
-  // 1. 先调用校验接口
-  const checkUrl = '/order/api.php?s=/api/warehouse/export_warehousing_excel'
-
-  // 模拟AJAX请求（实际项目中替换为jQuery的$.post）
-  // 这里使用fetch模拟，如需jQuery可替换为注释中的代码
-  fetch(checkUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      jfcode,
-      name,
-      start,
-      end,
-      order,
-      agent,
-    }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      // 2. 校验数据是否存在
-      if (data.data && data.data.length > 0) {
-        // 3. 拼接导出URL并打开
-        const exportUrl = `/api/home/warehouse/export_warehousing_excel&${new URLSearchParams({
-          jfcode,
-          name,
-          start,
-          end,
-          order,
-          agent,
-        }).toString()}`
-
-        // 打开新窗口下载
-        window.open(exportUrl, '_blank')
-      } else {
-        // 无数据提示（使用layer或原生alert）
-        if (window.layer) {
-          alert('无数据！请选择条件后导出')
-        } else {
-          alert('无数据！请选择条件后导出')
-        }
-      }
-    })
-    .catch((error) => {
-      console.error('导出校验失败：', error)
-      if (window.layer) {
-        alert('导出失败，请重试！')
-      } else {
-        alert('导出失败，请重试！')
-      }
-    })
-
-  // ---- 如果你项目中使用jQuery，可替换为以下代码 ----
-  /*
-  $.post('/order/api.php?s=/api/warehouse/export_warehousing_excel',
-    {
-      'jfcode': jfcode,
-      'name': name,
-      'start': start,
-      'end': end,
-      'order': order,
-      'agent': agent
-    }, function (data) {
-      if(data.data.length > 0){
-        var urls = '/order/api.php?s=/home/warehouse/export_warehousing_excel' + 
-          '&jfcode=' + jfcode + 
-          '&name=' + name + 
-          '&start=' + start + 
-          '&end=' + end + 
-          '&order=' + order + 
-          '&agent=' + agent;
-        window.open(urls);
-      }else{
-        layer.msg('无数据！请选择条件后导出');
-      }
-    })
-  */
-}
-
-/**
- * 点击空白处关闭建议框
- * @param {MouseEvent} e - 鼠标事件对象
- * @returns {void}
- */
-const handleClickOutside = (e) => {
-  const searchContainer = document.querySelector('.group')
-  if (searchContainer && !searchContainer.contains(e.target)) {
-    showSuggestions.value = false
-    setTimeout(() => {
-      showSuggestions.value = true
-      activeSuggestionIndex.value = -1
-    }, 100)
-  }
-}
-
-/**
- * 组件挂载钩子
- * @returns {void}
- */
-onMounted(() => {
-  // 恢复历史记录
-  const savedHistory = localStorage.getItem('searchHistory')
-  if (savedHistory) {
-    searchHistory.value = JSON.parse(savedHistory)
-  }
-
-  // 恢复主题设置
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark') {
-    isDarkTheme.value = true
-    document.documentElement.classList.add('dark')
-  }
-
-  // 绑定全局点击事件
-  document.addEventListener('click', handleClickOutside)
-
-  // 引入Font Awesome图标
-  if (!document.querySelector('link[href*="font-awesome"]')) {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = 'https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css'
-    document.head.appendChild(link)
-  }
-})
-
-/**
- * 组件卸载钩子
- * @returns {void}
- */
-onUnmounted(() => {
-  // 移除全局点击监听
-  document.removeEventListener('click', handleClickOutside)
-  // 取消防抖函数
-  handleInputDebounced.cancel()
-})
-
-/**
- * 监听搜索关键词变化
- * @param {string} newVal - 新的关键词值
- * @returns {void}
- */
-watch(searchKeyword, (newVal) => {
-  if (newVal) {
-    showSuggestions.value = true
-  }
-})
-
-defineOptions({
-  name: 'searchPage',
-})
-</script>
 
 <style scoped>
 /* 基础动画 */

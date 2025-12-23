@@ -26,8 +26,6 @@ instance.interceptors.request.use(
 // 响应拦截器
 instance.interceptors.response.use(
   (res) => {
-    console.log(res.data)
-
     // 处理业务失败（非200/自定义失败逻辑）
     if (!res.data.success) {
       console.log('业务请求失败:', res.data.msg)
