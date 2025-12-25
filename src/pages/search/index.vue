@@ -48,8 +48,8 @@ const showSuggestions = ref(true)
 const activeSuggestionIndex = ref(-1)
 // 响应式数据 - 是否显示热门关键词
 const showHotKeywords = ref(false)
-// 库位
-const codeKey = ref('')
+// 库位信息
+const numInfo = ref({})
 
 // 热门关键词（业务定制）
 const hotKeywords = ref(['正辉', '全贸', '飞众', '展基'])
@@ -220,7 +220,7 @@ const handleSearch = () => {
 
   const p2 = searchInfoApi(searchKeyword.value).then((res) => {
     console.log(res.data)
-    codeKey.value = res.data[0].number
+    numInfo.value = res.data[0]
   })
 
   Promise.all([p1, p2])
@@ -490,17 +490,23 @@ defineOptions({
           搜索
         </button>
       </div>
-      <div class="flex h-20 px-5 items-center flex-wrap">
-        <p class="mt-5 font-bold text-primary">库位:{{ codeKey }}</p>
-        <h2 class="w-full font-bold py-5">所有供应商代码</h2>
-        <div class="codes flex-1 flex-wrap justify-center items-center">
-          <div
-            v-for="(item, index) in codeKeys"
-            :key="item"
-            class="badge badge-soft py-1 mx-1"
-            :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
-          >
-            {{ jscodes[item] || item }}
+      <div class="card shadow m-4">
+        <div class="card-body">
+          <div v-if="Object.entries(numInfo).length">
+            <p class="font-bold text-primary">库位:{{ numInfo.number }}</p>
+            <p class="font-bold text-primary">库存:{{ numInfo.avl_sum }}</p>
+            <p class="font-bold text-primary">商品名称:{{ numInfo.name }}</p>
+          </div>
+          <h2 class="w-full font-bold py-1">所有供应商代码</h2>
+          <div class="codes flex-1 flex-wrap justify-center items-center">
+            <div
+              v-for="(item, index) in codeKeys"
+              :key="item"
+              class="badge badge-soft py-1 mx-1"
+              :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
+            >
+              {{ jscodes[item] || item }}
+            </div>
           </div>
         </div>
       </div>
@@ -547,7 +553,7 @@ defineOptions({
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-sm text-base-content/70 dark:text-white/70">排序方式：</span>
+          <span class="text-sm w-xs text-base-content/70 dark:text-white/70">排序方式：</span>
           <select
             class="select select-sm select-bordered rounded-lg bg-base-100 dark:bg-base-400 text-base-content dark:text-white border-base-200 dark:border-base-500"
             v-model="sortType"
