@@ -552,8 +552,8 @@ defineOptions({
             关键词："{{ searchKeyword }}"
           </p>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm w-xs text-base-content/70 dark:text-white/70">排序方式：</span>
+        <div class="flex items-center w-[50%] gap-3">
+          <span class="text-sm w-full text-base-content/70 dark:text-white/70">排序方式：</span>
           <select
             class="select select-sm select-bordered rounded-lg bg-base-100 dark:bg-base-400 text-base-content dark:text-white border-base-200 dark:border-base-500"
             v-model="sortType"
