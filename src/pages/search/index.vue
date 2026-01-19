@@ -513,7 +513,9 @@ defineOptions({
             <p class="font-bold text-primary">商品名称:{{ numInfo.name || '未知' }}</p>
           </div> -->
           <ul class="list bg-base-100 rounded-box shadow-md">
-            <li class="p-4 pb-2 text-xs opacity-60 tracking-wide">info</li>
+            <li class="p-4 pb-2 text-xs opacity-60 tracking-wide" v-if="numInfo[0]?.number">
+              产品信息
+            </li>
 
             <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item">
               <div>
@@ -522,7 +524,7 @@ defineOptions({
                   src="https://img.daisyui.com/images/profile/demo/1@94.webp"
                 /> -->
                 <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
-                  <span className="text-3xl w-full font-bold text-balance text-shadow-2xs"
+                  <span className="text-3xl w-full font-bold text-accent text-shadow-2xs"
                     >{{ item.sum }} PCS</span
                   >
                 </div>
