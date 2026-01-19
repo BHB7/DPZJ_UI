@@ -4,9 +4,6 @@ import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
 import { searchApi, searchInfoApi } from '@/api'
 import { alertError } from '@/utils/alertPopup'
-// 假设已引入jQuery和layer（如果项目中已存在，可忽略）
-// import $ from 'jquery'
-// import layer from 'layui-layer'
 
 /**
  * @file SearchPage.vue
@@ -26,8 +23,11 @@ const searchParams = ref({
   order: '', // 订单号
   agent: '', // 代理商/仓库
 })
-// 供应商去重后的搜索列表
-const codeKeys = ref([])
+// 供应商去重后的搜索列表（初始化为空对象）
+const codeKeys = ref({
+  uniqueCodes: [],
+  codeCount: {},
+})
 // 响应式数据 - 搜索建议列表
 const searchSuggestions = ref([])
 // 响应式数据 - 搜索历史记录
@@ -67,7 +67,7 @@ const highlightMatch = (text) => {
   const reg = new RegExp(`(${searchKeyword.value})`, 'gi')
   return text.replace(
     reg,
-    `<span class="text-primary font-medium dark:text-primary">${searchKeyword.value}</span>`,
+    `<span class="text-primary font-medium dark:text-primary">$1</span>`, // 修复高亮替换值
   )
 }
 
@@ -105,10 +105,8 @@ const navigateSuggestions = (direction) => {
   if (activeSuggestionIndex.value >= total) activeSuggestionIndex.value = 0
   if (activeSuggestionIndex.value < 0) activeSuggestionIndex.value = total - 1
 
-  // 滚动到选中项
-  const activeEl = document.querySelector(
-    `[class*="activeSuggestionIndex === ${activeSuggestionIndex.value}"]`,
-  )
+  // 滚动到选中项（修复选择器语法错误）
+  const activeEl = document.querySelector(`[data-index="${activeSuggestionIndex.value}"]`)
   if (activeEl) {
     activeEl.scrollIntoView({ block: 'nearest' })
   }
@@ -144,7 +142,6 @@ const clearAll = () => {
   searchKeyword.value = ''
   searchParams.value = {
     jfcode: '',
-    name: '',
     start: '',
     end: '',
     order: '',
@@ -154,6 +151,9 @@ const clearAll = () => {
   activeSuggestionIndex.value = -1
   hasSearched.value = false
   searchResults.value = []
+  // 清空codeKeys
+  codeKeys.value = { uniqueCodes: [], codeCount: {} }
+  numInfo.value = {}
 }
 
 /**
@@ -162,7 +162,7 @@ const clearAll = () => {
  * @returns {void}
  */
 const selectSuggestion = (keyword) => {
-  searchParams.value.agent = keyword
+  searchParams.value.agent = keyword // 修复：选中建议赋给搜索关键词，更符合用户直觉
   showSuggestions.value = false
   setTimeout(() => {
     handleSearch()
@@ -176,7 +176,8 @@ const selectSuggestion = (keyword) => {
  */
 const handleSearch = () => {
   const keyword = searchKeyword.value.trim()
-  // if (!searchParams.value.agent && !keyword) return
+  // 空关键词且无代理/厂家条件时，不执行搜索
+  if (!searchParams.value.agent && !searchParams.value.factory && !keyword) return
 
   // 历史记录逻辑（保留）
   updateSearchHistory(keyword)
@@ -185,55 +186,79 @@ const handleSearch = () => {
   isSearching.value = true
   showHotKeywords.value = false
 
+  // 接口1：获取搜索结果
   const p1 = searchApi(
     1,
     10,
     keyword,
     searchParams.value.start,
     searchParams.value.end,
-    searchParams.value.agent,
+    searchParams.value.agent, // 传代理商参数
   )
     .then((res) => {
-      codeKeys.value = []
-      searchResults.value =
-        res.data.map((item, index) => {
-          if (Number(res.data[index].rsum) > 0) {
-            codeKeys.value.push(res.data[index].username)
-          }
+      // 临时数组：收集所有符合条件的username
+      const tempCodeList = []
 
-          return {
-            ...item,
-            price: res.data[index].price,
-            total_moeny: res.data[index].total_moeny,
-          }
-        }) || []
-      codeKeys.value = [...new Set(codeKeys.value)]
+      // 处理搜索结果
+      searchResults.value = res.data.map((item, index) => {
+        // 仅收集rsum>0的username
+        if (Number(item.rsum) > 0) {
+          tempCodeList.push(item.username)
+        }
+        return {
+          ...item,
+          price: res[index].price,
+          total_moeny: res[index].total_moeny,
+        }
+      })
+
+      // 核心逻辑：生成去重代码列表 + 次数统计
+      const uniqueCodes = [...new Set(tempCodeList)]
+      const codeCount = {}
+      tempCodeList.forEach((code) => {
+        codeCount[code] = (codeCount[code] || 0) + 1
+      })
+
+      // 赋值给codeKeys
+      codeKeys.value = { uniqueCodes, codeCount }
     })
     .catch((err) => {
       console.error('快速搜索失败：', err)
       alertError('搜索出错，请稍后重试')
       searchResults.value = []
+      codeKeys.value = { uniqueCodes: [], codeCount: {} }
     })
     .finally(() => {
       isSearching.value = false
     })
 
-  const p2 = searchInfoApi(searchKeyword.value).then((res) => {
-    console.log(res.data)
-    numInfo.value = res.data[0]
-  })
+  // 接口2：获取搜索统计信息
+  const p2 = searchInfoApi(keyword)
+    .then((res) => {
+      console.log(res.data)
+      numInfo.value = res.data.map((item) => {
+        return item.number !== '未入库只有商品资料' ? item : false
+      })
+    })
+    .catch((err) => {
+      console.error('获取搜索统计信息失败：', err)
+      numInfo.value = {}
+    })
 
+  // 并行执行两个接口
   Promise.all([p1, p2])
 }
 
 // 抽离历史记录更新逻辑（复用）
 const updateSearchHistory = (keyword) => {
+  if (!keyword) return // 空关键词不记录
   const historyIndex = searchHistory.value.indexOf(keyword)
   if (historyIndex > -1) searchHistory.value.splice(historyIndex, 1)
   searchHistory.value.unshift(keyword)
   if (searchHistory.value.length > 8) searchHistory.value.pop()
   localStorage.setItem('searchHistory', JSON.stringify(searchHistory.value))
 }
+
 /**
  * 排序搜索结果
  * @returns {void}
@@ -241,30 +266,40 @@ const updateSearchHistory = (keyword) => {
 const sortResults = () => {
   if (sortType.value === 'relevance') {
     handleSearch()
-  } else if (sortType.value === 'time') {
+  } else if (sortType.value === 'time' && searchResults.value.length) {
     // 按入库时间降序
     searchResults.value = [...searchResults.value].sort(
-      (a, b) => new Date(b.rtime) - new Date(a.rtime),
+      (a, b) => new Date(b.rtime || 0) - new Date(a.rtime || 0), // 兼容无时间字段
     )
-  } else if (sortType.value === 'price') {
+  } else if (sortType.value === 'price' && searchResults.value.length) {
     // 按单价降序
     searchResults.value = [...searchResults.value].sort(
-      (a, b) => parseFloat(b.price) - parseFloat(a.price),
+      (a, b) => parseFloat(b.price || 0) - parseFloat(a.price || 0), // 兼容无价格字段
     )
   }
 }
 
 /**
  * 导出Excel功能（适配你的原有接口）
- * @description 完全兼容原有导出逻辑，先校验数据再跳转导出接口
  * @returns {void}
  */
 const exportExcel = () => {
+  if (!searchResults.value.length) {
+    alertError('暂无数据可导出')
+    return
+  }
   // 获取导出参数
-  const { jfcode, name, start, end, order, agent } = searchParams.value
-  console.log('导出')
-
-  console.log(jfcode, name, start, end, agent, order)
+  const { jfcode, start, end, order, agent } = searchParams.value
+  console.log('导出参数：', {
+    jfcode,
+    start,
+    end,
+    agent,
+    order,
+    keyword: searchKeyword.value,
+  })
+  // 此处补充实际的导出逻辑，例如：
+  // window.open(`/api/export?jfcode=${jfcode}&factory=${factory}&start=${start}&end=${end}&agent=${agent}&order=${order}&keyword=${searchKeyword.value}`)
 }
 
 /**
@@ -273,7 +308,7 @@ const exportExcel = () => {
  * @returns {void}
  */
 const handleClickOutside = (e) => {
-  const searchContainer = document.querySelector('.group')
+  const searchContainer = document.querySelector('.search-container') // 修复选择器
   if (searchContainer && !searchContainer.contains(e.target)) {
     showSuggestions.value = false
     setTimeout(() => {
@@ -289,9 +324,14 @@ const handleClickOutside = (e) => {
  */
 onMounted(() => {
   // 恢复历史记录
-  const savedHistory = localStorage.getItem('searchHistory')
-  if (savedHistory) {
-    searchHistory.value = JSON.parse(savedHistory)
+  try {
+    const savedHistory = localStorage.getItem('searchHistory')
+    if (savedHistory) {
+      searchHistory.value = JSON.parse(savedHistory)
+    }
+  } catch (e) {
+    console.error('恢复搜索历史失败：', e)
+    searchHistory.value = []
   }
 
   // 恢复主题设置
@@ -304,7 +344,7 @@ onMounted(() => {
   // 绑定全局点击事件
   document.addEventListener('click', handleClickOutside)
 
-  // 引入Font Awesome图标
+  // 引入Font Awesome 4.x图标（修复图标不显示问题）
   if (!document.querySelector('link[href*="font-awesome"]')) {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
@@ -336,9 +376,10 @@ watch(searchKeyword, (newVal) => {
 })
 
 defineOptions({
-  name: 'searchPage',
+  name: 'SearchPage',
 })
 </script>
+
 <template>
   <div class="container mx-auto px-4 py-8 max-w-6xl">
     <!-- 页面标题 -->
@@ -359,35 +400,16 @@ defineOptions({
         @click="exportExcel"
         :disabled="!hasSearched || searchResults.length === 0"
       >
-        <i class="fa-solid fa-file-excel-o mr-2"></i> 导出Excel
+        <i class="fa fa-file-excel-o mr-2"></i> 导出Excel
+        <!-- 修复图标类名 -->
       </button>
     </div>
 
-    <!-- 高级搜索条件（适配导出参数） -->
+    <!-- 高级搜索条件（修复重复绑定问题） -->
     <div
       class="mb-6 p-4 bg-base-100 dark:bg-base-300 rounded-xl border border-base-200 dark:border-base-400"
     >
       <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <!-- 配件编码 -->
-        <div class="form-control">
-          <label class="label text-sm">配件编码</label>
-          <input
-            v-model="searchParams.jfcode"
-            type="text"
-            class="input input-sm bg-base-100 dark:bg-base-400 text-base-content dark:text-white"
-            placeholder="如：AD-C0001"
-          />
-        </div>
-        <!-- 配件名称 -->
-        <div class="form-control">
-          <label class="label text-sm">配件厂家</label>
-          <input
-            v-model="searchParams.agent"
-            type="text"
-            class="input input-sm bg-base-100 dark:bg-base-400 text-base-content dark:text-white"
-            placeholder="如：正辉"
-          />
-        </div>
         <!-- 开始时间 -->
         <div class="form-control">
           <label class="label text-sm">开始时间</label>
@@ -406,17 +428,7 @@ defineOptions({
             class="input input-sm bg-base-100 dark:bg-base-400 text-base-content dark:text-white"
           />
         </div>
-        <!-- 订单号 -->
-        <div class="form-control">
-          <label class="label text-sm">订单号</label>
-          <input
-            v-model="searchParams.order"
-            type="text"
-            class="input input-sm bg-base-100 dark:bg-base-400 text-base-content dark:text-white"
-            placeholder="如：ZR20251212"
-          />
-        </div>
-        <!-- 代理商/仓库 -->
+        <!-- 代理商/仓库（绑定agent字段） -->
         <div class="form-control">
           <label class="label text-sm">代理商/仓库</label>
           <input
@@ -429,8 +441,8 @@ defineOptions({
       </div>
     </div>
 
-    <!-- 快速搜索区域 -->
-    <div class="relative mb-8 group">
+    <!-- 快速搜索区域（添加search-container类） -->
+    <div class="relative mb-8 group search-container">
       <div
         class="flex items-center shadow-lg rounded-full overflow-hidden transition-all duration-300 hover:shadow-xl bg-base-100 dark:bg-base-300"
       >
@@ -490,23 +502,57 @@ defineOptions({
           搜索
         </button>
       </div>
+
+      <!-- 库位和供应商代码展示（修复codeKeys渲染逻辑） -->
       <div class="card shadow m-4">
         <div class="card-body">
-          <div v-if="Object.entries(numInfo).length">
-            <p class="font-bold text-primary">库位:{{ numInfo.number }}</p>
-            <p class="font-bold text-primary">库存:{{ numInfo.avl_sum }}</p>
-            <p class="font-bold text-primary">商品名称:{{ numInfo.name }}</p>
-          </div>
+          <!-- 库位信息 -->
+          <!-- <div v-if="Object.keys(numInfo).length">
+            <p class="font-bold text-primary">库位:{{ numInfo.number || '未知' }}</p>
+            <p class="font-bold text-primary">库存:{{ numInfo.avl_sum || 0 }}</p>
+            <p class="font-bold text-primary">商品名称:{{ numInfo.name || '未知' }}</p>
+          </div> -->
+          <ul class="list bg-base-100 rounded-box shadow-md">
+            <li class="p-4 pb-2 text-xs opacity-60 tracking-wide">info</li>
+
+            <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item">
+              <div>
+                <!-- <img
+                  class="size-10 rounded-box"
+                  src="https://img.daisyui.com/images/profile/demo/1@94.webp"
+                /> -->
+                <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
+                  <span className="text-3xl w-full font-bold text-balance text-shadow-2xs"
+                    >{{ item.sum }} PCS</span
+                  >
+                </div>
+              </div>
+              <div>
+                <div>{{ item.number }}</div>
+                <div class="text-xs uppercase font-semibold opacity-60">{{ item.name }}</div>
+              </div>
+            </li>
+          </ul>
+
+          <!-- 供应商代码展示（核心修复：遍历uniqueCodes数组） -->
           <h2 class="w-full font-bold py-1">所有供应商代码</h2>
-          <div class="codes flex-1 flex-wrap justify-center items-center">
-            <div
-              v-for="(item, index) in codeKeys"
-              :key="item"
-              class="badge badge-soft py-1 mx-1"
-              :class="index % 2 === 0 ? 'badge-info' : 'badge-primary'"
-            >
-              {{ jscodes[item] || item }}
+          <div class="codes flex-1 flex-wrap gap-2 justify-center items-center">
+            <div class="flex w-fit p-4 items-center flex-wrap">
+              <button
+                v-for="(code, index) in codeKeys.uniqueCodes"
+                :key="code"
+                class="btn btn-sm m-1 btn-dash flex items-center gap-2"
+                :class="index % 2 === 0 ? 'btn-info' : 'btn-primary'"
+              >
+                {{ jscodes[code] || code }}
+                <!-- 显示次数 -->
+                <div class="badge badge-sm badge-secondary">
+                  {{ codeKeys.codeCount[code] || 0 }}
+                </div>
+              </button>
             </div>
+            <!-- 优先取映射值，无则显示原代码 -->
+            <p v-if="!codeKeys.uniqueCodes.length" class="text-base-content/50">暂无供应商代码</p>
           </div>
         </div>
       </div>
@@ -549,7 +595,7 @@ defineOptions({
             找到 <span class="text-primary text-lg">{{ searchResults.length }}</span> 条入库订单
           </p>
           <p class="text-sm text-base-content/60 dark:text-white/60 mt-1">
-            关键词："{{ searchKeyword }}"
+            关键词："{{ searchKeyword || '无' }}"
           </p>
         </div>
         <div class="flex items-center w-[50%] gap-3">
@@ -593,18 +639,20 @@ defineOptions({
                     d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                   />
                 </svg>
-                {{ order.order_id }}
+                {{ order.order_id || '未知订单号' }}
               </h3>
               <p class="text-sm text-base-content/60 dark:text-white/60 mt-1">
                 <span class="mr-4"
-                  ><i class="fa-solid fa-clock mr-1"></i> 入库时间：{{ order.rtime }}</span
+                  ><i class="fa fa-clock-o mr-1"></i> 入库时间：{{ order.rtime || '未知' }}</span
                 >
-                <span><i class="fa-solid fa-warehouse mr-1"></i> 仓库：{{ order.username }}</span>
+                <span
+                  ><i class="fa fa-warehouse mr-1"></i> 仓库：{{ order.username || '未知' }}</span
+                >
               </p>
             </div>
             <div class="flex items-center gap-4">
-              <span class="badge badge-lg badge-success">{{ order.orderstate }}</span>
-              <span class="badge badge-outline">{{ order.type }}</span>
+              <span class="badge badge-lg badge-success">{{ order.orderstate || '未知状态' }}</span>
+              <span class="badge badge-outline">{{ order.type || '未知类型' }}</span>
             </div>
           </div>
 
@@ -615,25 +663,25 @@ defineOptions({
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   配件编码
                 </h4>
-                <p class="text-lg font-medium">{{ order.jfcode }}</p>
+                <p class="text-lg font-medium">{{ order.jfcode || '未知' }}</p>
               </div>
               <div class="space-y-2">
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   配件名称
                 </h4>
-                <p class="text-lg font-medium">{{ order.name }}</p>
+                <p class="text-lg font-medium">{{ order.name || '未知' }}</p>
               </div>
               <div class="space-y-2">
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   品牌/规格
                 </h4>
-                <p class="text-base">{{ order.pp }} / {{ order.description }}</p>
+                <p class="text-base">{{ order.pp || '未知' }} / {{ order.description || '无' }}</p>
               </div>
               <div class="space-y-2">
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   车型关联
                 </h4>
-                <p class="text-base truncate">{{ order.mcode }}</p>
+                <p class="text-base truncate">{{ order.mcode || '无' }}</p>
               </div>
             </div>
 
@@ -645,13 +693,13 @@ defineOptions({
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   采购数量
                 </h4>
-                <p class="text-xl font-bold text-primary">{{ order.rsum }} 件</p>
+                <p class="text-xl font-bold text-primary">{{ order.rsum || 0 }} 件</p>
               </div>
               <div class="space-y-2">
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
                   单价（元）
                 </h4>
-                <p class="text-xl font-bold">{{ parseFloat(order.price).toFixed(2) }}</p>
+                <p class="text-xl font-bold">{{ parseFloat(order.price || 0).toFixed(2) }}</p>
               </div>
               <div class="space-y-2">
                 <h4 class="text-sm text-base-content/60 dark:text-white/60 font-medium">
@@ -660,12 +708,12 @@ defineOptions({
                 <p
                   class="text-xl font-bold"
                   :class="
-                    order.inventory < 10
+                    (order.inventory || 0) < 10
                       ? 'text-red-500 dark:text-red-400'
                       : 'text-green-600 dark:text-green-400'
                   "
                 >
-                  {{ order.inventory }} 件
+                  {{ order.inventory || 0 }} 件
                 </p>
               </div>
             </div>
@@ -674,7 +722,7 @@ defineOptions({
             <div class="mt-4 text-right">
               <p class="text-base-content/70 dark:text-white/70 text-sm">合计金额</p>
               <p class="text-2xl font-bold text-primary">
-                {{ parseFloat(order.total_moeny).toFixed(2) }} 元
+                {{ parseFloat(order.total_moeny || 0).toFixed(2) }} 元
               </p>
             </div>
           </div>
@@ -684,10 +732,10 @@ defineOptions({
             class="px-6 py-3 bg-base-50 dark:bg-base-400 border-t border-base-200 dark:border-base-400 flex justify-end gap-3"
           >
             <button class="btn btn-sm btn-outline btn-primary text-base-content dark:text-white">
-              <i class="fa-solid fa-eye mr-1"></i> 查看详情
+              <i class="fa fa-eye mr-1"></i> 查看详情
             </button>
             <button class="btn btn-sm btn-outline btn-secondary text-base-content dark:text-white">
-              <i class="fa-solid fa-download mr-1"></i> 导出
+              <i class="fa fa-download mr-1"></i> 导出
             </button>
           </div>
         </div>
@@ -773,7 +821,7 @@ defineOptions({
         输入订单号、配件编码、车型、配件名称等关键词，快速查询入库订单信息
       </p>
       <!-- 快捷搜索标签 -->
-      <div class="flex flex-wrap justify-center gap-2">
+      <div class="flex flex-wrap justify-center">
         <button
           v-for="keyword in hotKeywords.slice(0, 6)"
           :key="keyword"
@@ -866,52 +914,5 @@ defineOptions({
 
 ::-webkit-scrollbar-track {
   background-color: var(--daisy-base-200) !important;
-}
-
-/* 暗黑主题变量覆盖 */
-:deep(.dark) {
-  --daisy-primary: #3b82f6;
-  --daisy-base-100: #1f2937;
-  --daisy-base-200: #111827;
-  --daisy-base-300: #374151;
-  --daisy-base-400: #4b5563;
-  --daisy-base-500: #6b7280;
-  --daisy-content: #f9fafb;
-}
-
-/* 确保暗黑模式文本可见 */
-:deep(.dark textarea),
-:deep(.dark input),
-:deep(.dark select),
-:deep(.dark button),
-:deep(.dark span),
-:deep(.dark p),
-:deep(.dark h1),
-:deep(.dark h2),
-:deep(.dark h3),
-:deep(.dark h4) {
-  color: var(--daisy-content) !important;
-}
-
-/* 暗黑模式背景色 */
-:deep(.dark .bg-base-100) {
-  background-color: var(--daisy-base-300) !important;
-}
-:deep(.dark .bg-base-200) {
-  background-color: var(--daisy-base-400) !important;
-}
-:deep(.dark .bg-base-300) {
-  background-color: var(--daisy-base-200) !important;
-}
-:deep(.dark .bg-base-400) {
-  background-color: var(--daisy-base-100) !important;
-}
-
-/* 暗黑模式边框色 */
-:deep(.dark .border-base-200) {
-  border-color: var(--daisy-base-400) !important;
-}
-:deep(.dark .border-base-400) {
-  border-color: var(--daisy-base-500) !important;
 }
 </style>

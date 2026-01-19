@@ -21,12 +21,13 @@ export const searchApi = (page = 1, limit = 20, code, start = '', end = '', agen
  * ser XD-C0001
  * @param { string } ser 编码
  * 
+ *https://saas.juwoxing.com/order/api.php?s=/api/warehouse/get_move_child&page=1&ser=XD-&onetype=&twotype=&zerotype=&brand=&kw=&kwmh=21&page=1&limit=100
 https://saas.juwoxing.com/order/api.php?s=/api/warehouse/get_move_child&page=1&ser=XD-C0001&onetype=&twotype=&zerotype=&brand=&kw=&kwmh=&page=1&limit=100
  */
-export const searchInfoApi = (ser = '', page = 1, limit = 2) => {
+export const searchInfoApi = (ser = '', key = '', page = 1, limit = 2) => {
   console.log(ser)
 
   return request.get(
-    `/api/warehouse/get_move_child&page=1&ser=${ser}&onetype=&twotype=&zerotype=&brand=&kw=&kwmh=&page=1&limit=1`,
+    `/api/warehouse/get_move_child&page=1&ser=${ser}&onetype=&twotype=&zerotype=&brand=&kw=&kwmh=${key}&page=1&limit=5`,
   )
 }
