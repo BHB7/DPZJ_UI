@@ -17,10 +17,15 @@ const router = createRouter({
         {
           path: 'search',
           component: () => import('@/pages/search/index.vue'),
+          children: [],
         },
         {
           path: 'tools',
           component: () => import('@/pages/tools/index.vue'),
+        },
+        {
+          path: 'time',
+          component: () => import('@/pages/timeLine/index.vue'),
         },
       ],
     },

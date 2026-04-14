@@ -4,6 +4,8 @@ import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
 import { searchApi, searchInfoApi } from '@/api'
 import { alertError } from '@/utils/alertPopup'
+import { useRoute, useRouter } from 'vue-router'
+import evBus from '@/utils/evBus'
 
 /**
  * @file SearchPage.vue
@@ -48,6 +50,7 @@ const showSuggestions = ref(true)
 const activeSuggestionIndex = ref(-1)
 // 响应式数据 - 是否显示热门关键词
 const showHotKeywords = ref(false)
+
 // 库位信息
 const numInfo = ref({})
 
@@ -174,8 +177,9 @@ const selectSuggestion = (keyword) => {
  * 执行快速搜索
  * @returns {void}
  */
-const handleSearch = () => {
+const handleSearch = async () => {
   const keyword = searchKeyword.value.trim()
+
   // 空关键词且无代理/厂家条件时，不执行搜索
   if (!searchParams.value.agent && !searchParams.value.factory && !keyword) return
 
@@ -246,7 +250,9 @@ const handleSearch = () => {
     })
 
   // 并行执行两个接口
-  Promise.all([p1, p2])
+  await Promise.all([p1, p2])
+
+  evBus.emit('navMsg', numInfo.value[0]?.mcode?.split('/'))
 }
 
 // 抽离历史记录更新逻辑（复用）
@@ -516,26 +522,29 @@ defineOptions({
             <li class="p-4 pb-2 text-xs opacity-60 tracking-wide" v-if="numInfo[0]?.number">
               产品信息
             </li>
+            <li v-for="item in numInfo[0]?.mcode?.split('/')" :key="item">{{ item }}</li>
 
-            <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item">
-              <div>
-                <!-- <img
+            <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item.sum >= 1">
+              <div v-if="item.sum >= 1">
+                <div>
+                  <!-- <img
                   class="size-10 rounded-box"
                   src="https://img.daisyui.com/images/profile/demo/1@94.webp"
                 /> -->
-                <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
-                  <span className="text-3xl w-full font-bold text-accent text-shadow-2xs"
-                    >{{ item.sum }} PCS</span
-                  >
+                  <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
+                    <span className="text-3xl w-full font-bold text-accent text-shadow-2xs"
+                      >{{ item.sum }} PCS</span
+                    >
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div>{{ item.number }}</div>
-                <div class="text-xs uppercase font-semibold opacity-60">{{ item.name }}</div>
+                <div>
+                  <div>{{ item.number }}</div>
+                  <div class="text-xs uppercase font-semibold opacity-60">{{ item.name }}</div>
+                </div>
               </div>
             </li>
           </ul>
-
+          <div class="divider">CODE</div>
           <!-- 供应商代码展示（核心修复：遍历uniqueCodes数组） -->
           <h2 class="w-full font-bold py-1">所有供应商代码</h2>
           <div class="codes flex-1 flex-wrap gap-2 justify-center items-center">
@@ -543,6 +552,7 @@ defineOptions({
               <button
                 v-for="(code, index) in codeKeys.uniqueCodes"
                 :key="code"
+                @click="useRouter().push({ path: '/time', param: { name: code } })"
                 class="btn btn-sm m-1 btn-dash flex items-center gap-2"
                 :class="index % 2 === 0 ? 'btn-info' : 'btn-primary'"
               >
@@ -553,6 +563,7 @@ defineOptions({
                 </div>
               </button>
             </div>
+            <router-view></router-view>
             <!-- 优先取映射值，无则显示原代码 -->
             <p v-if="!codeKeys.uniqueCodes.length" class="text-base-content/50">暂无供应商代码</p>
           </div>

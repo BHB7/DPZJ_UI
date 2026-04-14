@@ -2,6 +2,7 @@
 import { RouterView } from 'vue-router'
 import Navbar from '@/components/nav/index.vue'
 import Dock from '@/components/dock/index.vue'
+
 defineOptions({
   name: 'layoutPage',
 })

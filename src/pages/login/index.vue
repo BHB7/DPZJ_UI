@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginApi } from '@/api/index'
 import { useUserStore } from '@/stores/user'
@@ -41,13 +41,11 @@ const handleLogin = async () => {
   loading.value = true
 
   try {
-    // 模拟登录请求
     const userInfo = await loginApi(form)
     console.log(userInfo)
 
     // 登录成功逻辑
     alertSuccess('登录成功！')
-    // 这里可以添加路由跳转逻辑
     userStore.setUserInfo(userInfo.msg.data)
     router.push('/')
   } catch (error) {

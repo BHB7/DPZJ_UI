@@ -1,18 +1,34 @@
 <script setup>
 import LineMdCloseToMenuAltTransition from '~icons/line-md/close-to-menu-alt-transition'
 import ThemeBtn from '@/components/theme/index.vue'
+import evBus from '@/utils/evBus'
+import { ref } from 'vue'
+import { isArray } from 'lodash-es'
+
+const msgList = ref([])
+evBus.on('navMsg', (data) => {
+  if (isArray(data)) {
+    msgList.value = data
+  } else {
+    msgList.value = [data]
+  }
+})
 defineOptions({
   name: 'navPage',
 })
 </script>
 <template>
   <div class="navbar fixed top-0 z-50 bg-base-100 shadow-sm">
-    <div class="flex-1">
+    <div class="flex items-center justify-between w-full">
       <a class="btn btn-ghost text-xl">
         <LineMdCloseToMenuAltTransition></LineMdCloseToMenuAltTransition>DPZJ-UI</a
       >
+      <span class="text-rotate">
+        <span>
+          <span v-for="msgItem in msgList" :key="msgItem">{{ msgItem }}</span>
+        </span>
+      </span>
+      <ThemeBtn></ThemeBtn>
     </div>
-    <ThemeBtn></ThemeBtn>
-    <div class="flex gap-2"></div>
   </div>
 </template>

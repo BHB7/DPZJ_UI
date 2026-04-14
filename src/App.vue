@@ -6,7 +6,7 @@
     <!-- 过渡动画 + 缓存 -->
     <transition name="route-fade" mode="out-in">
       <keep-alive include="search" :max="3">
-        <component :is="Component" />
+        <component class="pt-15" :is="Component" />
       </keep-alive>
     </transition>
   </router-view>
