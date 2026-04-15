@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { debounce } from 'lodash-es'
 import jscodes from '@/stores/jfcodes.json'
-import { searchApi, searchInfoApi } from '@/api'
+import { searchApi, searchInfoApi, searchApi2 } from '@/api'
 import { alertError } from '@/utils/alertPopup'
 import { useRoute, useRouter } from 'vue-router'
 import evBus from '@/utils/evBus'
@@ -53,26 +53,16 @@ const showHotKeywords = ref(false)
 
 // 库位信息
 const numInfo = ref({})
+// 编码信息 产品详细信息
+const carInfoList = ref([])
 
 // 热门关键词（业务定制）
 const hotKeywords = ref(['正辉', '全贸', '飞众', '展基'])
 
 // 模拟搜索建议数据
 const mockSuggestions = ['XD-C0042']
-
-/**
- * 高亮匹配文本
- * @param {string} text - 原始文本
- * @returns {string} 高亮后的HTML文本
- */
-const highlightMatch = (text) => {
-  if (!searchKeyword.value) return text
-  const reg = new RegExp(`(${searchKeyword.value})`, 'gi')
-  return text.replace(
-    reg,
-    `<span class="text-primary font-medium dark:text-primary">$1</span>`, // 修复高亮替换值
-  )
-}
+// 是否启用搜索api2 深度搜索
+const isApi2 = ref(false)
 
 /**
  * 处理快速搜索输入事件
@@ -240,15 +230,16 @@ const handleSearch = async () => {
   const p2 = searchInfoApi(keyword)
     .then((res) => {
       console.log(res.data)
+      carInfoList.value = res.data
+      console.log(carInfoList.value)
       numInfo.value = res.data.map((item) => {
-        return item.number !== '未入库只有商品资料' ? item : false
+        return item?.number !== '未入库只有商品资料' ? item : false
       })
     })
     .catch((err) => {
       console.error('获取搜索统计信息失败：', err)
       numInfo.value = {}
     })
-
   // 并行执行两个接口
   await Promise.all([p1, p2])
 
@@ -445,6 +436,13 @@ defineOptions({
           />
         </div>
       </div>
+      <fieldset class="fieldset bg-base-100 border-base-300 rounded-box w-64 border p-4">
+        <legend class="fieldset-legend">深度搜索</legend>
+        <label class="label">
+          <input type="checkbox" checked="isApi2" v-model="isApi2" class="toggle" />
+          开启后可通过车型搜索，默认编码
+        </label>
+      </fieldset>
     </div>
 
     <!-- 快速搜索区域（添加search-container类） -->
@@ -520,53 +518,68 @@ defineOptions({
           </div> -->
           <ul class="list bg-base-100 rounded-box shadow-md">
             <li class="p-4 pb-2 text-xs opacity-60 tracking-wide" v-if="numInfo[0]?.number">
-              产品信息
+              <p class="text-xl">产品信息</p>
             </li>
-            <li v-for="item in numInfo[0]?.mcode?.split('/')" :key="item">{{ item }}</li>
-
-            <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item.sum >= 1">
-              <div v-if="item.sum >= 1">
-                <div>
-                  <!-- <img
+            <div class="card p-2">
+              <p class="px-4 texl-md font-bold">车型关联</p>
+              <div class="flex flex-wrap w-full p-2">
+                <button
+                  v-for="(item, index) in numInfo[0]?.mcode?.split('/')"
+                  :key="item"
+                  class="btn btn-sm m-1 btn-dash flex items-center gap-2"
+                  :class="index % 2 === 0 ? 'btn-secondary' : 'btn-warning'"
+                >
+                  {{ item }}
+                </button>
+              </div>
+              <p class="px-4 texl-md font-bold">库位信息</p>
+              <li class="list-row" v-for="item in numInfo" :key="item.name" v-show="item.sum >= 1">
+                <div v-if="item.sum >= 1">
+                  <div>
+                    <!-- <img
                   class="size-10 rounded-box"
                   src="https://img.daisyui.com/images/profile/demo/1@94.webp"
                 /> -->
-                  <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
-                    <span className="text-3xl w-full font-bold text-accent text-shadow-2xs"
-                      >{{ item.sum }} PCS</span
-                    >
+                    <div className=" bg-base-300 text-neutral-content  w-fit rounded-full">
+                      <span className="text-3xl w-full font-bold text-accent text-shadow-2xs"
+                        >{{ item.sum }} PCS</span
+                      >
+                    </div>
+                  </div>
+                  <div>
+                    <div>{{ item.number }}</div>
+                    <div class="text-xs uppercase font-semibold opacity-60">{{ item.name }}</div>
                   </div>
                 </div>
-                <div>
-                  <div>{{ item.number }}</div>
-                  <div class="text-xs uppercase font-semibold opacity-60">{{ item.name }}</div>
+              </li>
+
+              <!-- 供应商代码展示（核心修复：遍历uniqueCodes数组） -->
+              <p class="px-4 texl-md font-bold">所有供应商代码</p>
+              <h2 class="w-full font-bold py-1"></h2>
+              <div class="codes flex-1 flex-wrap gap-2 justify-center items-center">
+                <div class="flex w-fit p-4 items-center flex-wrap">
+                  <button
+                    v-for="(code, index) in codeKeys.uniqueCodes"
+                    :key="code"
+                    @click="useRouter().push({ path: '/time', param: { name: code } })"
+                    class="btn btn-sm m-1 btn-dash flex items-center gap-2"
+                    :class="index % 2 === 0 ? 'btn-info' : 'btn-primary'"
+                  >
+                    {{ jscodes[code] || code }}
+                    <!-- 显示次数 -->
+                    <div class="badge badge-sm badge-secondary">
+                      {{ codeKeys.codeCount[code] || 0 }}
+                    </div>
+                  </button>
                 </div>
+                <router-view></router-view>
+                <!-- 优先取映射值，无则显示原代码 -->
+                <p v-if="!codeKeys.uniqueCodes.length" class="text-base-content/50">
+                  暂无供应商代码
+                </p>
               </div>
-            </li>
-          </ul>
-          <div class="divider">CODE</div>
-          <!-- 供应商代码展示（核心修复：遍历uniqueCodes数组） -->
-          <h2 class="w-full font-bold py-1">所有供应商代码</h2>
-          <div class="codes flex-1 flex-wrap gap-2 justify-center items-center">
-            <div class="flex w-fit p-4 items-center flex-wrap">
-              <button
-                v-for="(code, index) in codeKeys.uniqueCodes"
-                :key="code"
-                @click="useRouter().push({ path: '/time', param: { name: code } })"
-                class="btn btn-sm m-1 btn-dash flex items-center gap-2"
-                :class="index % 2 === 0 ? 'btn-info' : 'btn-primary'"
-              >
-                {{ jscodes[code] || code }}
-                <!-- 显示次数 -->
-                <div class="badge badge-sm badge-secondary">
-                  {{ codeKeys.codeCount[code] || 0 }}
-                </div>
-              </button>
             </div>
-            <router-view></router-view>
-            <!-- 优先取映射值，无则显示原代码 -->
-            <p v-if="!codeKeys.uniqueCodes.length" class="text-base-content/50">暂无供应商代码</p>
-          </div>
+          </ul>
         </div>
       </div>
     </div>
@@ -598,14 +611,18 @@ defineOptions({
     </div>
 
     <!-- 订单结果列表 -->
-    <div v-else-if="searchResults.length > 0" class="space-y-6">
+    <div v-else-if="searchResults.length || carInfoList.length > 0" class="space-y-6">
       <!-- 结果统计和排序 -->
       <div
         class="flex flex-wrap justify-between items-center mb-6 gap-3 p-4 bg-base-100 dark:bg-base-300 rounded-xl border border-base-200 dark:border-base-400"
       >
         <div>
           <p class="text-base-content dark:text-white font-medium">
-            找到 <span class="text-primary text-lg">{{ searchResults.length }}</span> 条入库订单
+            找到
+            <span class="text-primary text-lg">{{
+              searchResults.length || carInfoList.length
+            }}</span>
+            条{{ searchResults.length ? '入库订单' : '车型记录' }}
           </p>
           <p class="text-sm text-base-content/60 dark:text-white/60 mt-1">
             关键词："{{ searchKeyword || '无' }}"
@@ -628,7 +645,7 @@ defineOptions({
       <!-- 订单卡片列表 -->
       <div class="grid grid-cols-1 gap-6">
         <div
-          v-for="(order, index) in searchResults"
+          v-for="(order, index) in searchResults.length ? searchResults : carInfoList"
           :key="index"
           class="result-card rounded-xl border border-base-200 dark:border-base-400 shadow-sm hover:shadow-md transition-all duration-300 bg-base-100 dark:bg-base-300 overflow-hidden"
         >

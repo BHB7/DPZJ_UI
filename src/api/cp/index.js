@@ -31,3 +31,21 @@ export const searchInfoApi = (ser = '', key = '', page = 1, limit = 2) => {
     `/api/warehouse/get_move_child&page=1&ser=${ser}&onetype=&twotype=&zerotype=&brand=&kw=&kwmh=${key}&page=1&limit=5`,
   )
 }
+
+/**
+ * 深度搜索
+ * 智能搜索：可以同时搜索编码，助记码，名称，车型，品牌，OE，商品备注
+ * https://saas.juwoxing.com/order/api.php?s=/api
+ * @param { string } znss 关键词
+ * @param { number } page 当前页
+ * @param { number } limit 总页数
+ *
+ *
+ */
+export const searchApi2 = (znss = '', page = 1, limit = 2) => {
+  console.log(znss)
+
+  return request.get(
+    `/api/goods/inventory_new&goods_ty=&keyword=&onetype=&twotype=&brand=&car_vin=&car_type=&inventory_ty=&znss=${znss}&inventory_status=1&group_type=&page=${page}&limit=${limit}`,
+  )
+}

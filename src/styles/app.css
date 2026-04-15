@@ -9,3 +9,13 @@
 .result-item {
   @apply hover:bg-base-200 transition-colors duration-200;
 }
+#nprogress .bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 999999 !important;
+  background: var(--color-cyan-400) !important;
+  height: 3px !important;
+  border-radius: 0 2px 2px 0;
+}
