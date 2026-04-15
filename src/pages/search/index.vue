@@ -62,7 +62,7 @@ const hotKeywords = ref(['正辉', '全贸', '飞众', '展基'])
 // 模拟搜索建议数据
 const mockSuggestions = ['XD-C0042']
 // 是否启用搜索api2 深度搜索
-const isApi2 = ref(false)
+const isApi2 = ref(true)
 
 /**
  * 处理快速搜索输入事件
