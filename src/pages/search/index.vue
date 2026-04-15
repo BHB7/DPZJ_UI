@@ -439,7 +439,7 @@ defineOptions({
       <fieldset class="fieldset bg-base-100 border-base-300 rounded-box w-64 border p-4">
         <legend class="fieldset-legend">深度搜索</legend>
         <label class="label">
-          <input type="checkbox" checked="isApi2" v-model="isApi2" class="toggle" />
+          <input type="checkbox" checked="isApi2" disabled v-model="isApi2" class="toggle" />
           开启后可通过车型搜索，默认编码
         </label>
       </fieldset>
