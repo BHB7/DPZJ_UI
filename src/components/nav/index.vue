@@ -20,9 +20,6 @@ defineOptions({
 <template>
   <div class="navbar fixed top-0 z-50 bg-base-100 shadow-sm">
     <div class="flex items-center justify-between w-full">
-      <a class="btn btn-ghost text-xl">
-        <LineMdCloseToMenuAltTransition></LineMdCloseToMenuAltTransition>DPZJ-UI</a
-      >
       <span class="text-rotate">
         <span>
           <span v-for="msgItem in msgList" :key="msgItem">{{ msgItem }}</span>
